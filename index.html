@@ -792,11 +792,13 @@ function splitStoryBody(text) {
 function parseStoryMap(data) {
   let activityRow = null, stepRow = null;
   const sliceRows = [];
+  const userRows  = [];
 
   for (const row of data) {
     const label = (row[0] || '').trim().toLowerCase();
-    if (label === 'activities') activityRow = row;
-    else if (label === 'steps')  stepRow = row;
+    if (label === 'activities')        activityRow = row;
+    else if (label === 'steps')        stepRow = row;
+    else if (label === 'users')        userRows.push(row);
     else if (label.startsWith('slice')) sliceRows.push(row);
   }
 
@@ -819,15 +821,27 @@ function parseStoryMap(data) {
 
   const colActivity = new Array(maxCols).fill('');
   const colStep     = new Array(maxCols).fill('');
-  let curAct = '', curStep = '';
+  const colUsers    = new Array(maxCols).fill('');
+  let curAct = '', curStep = '', curUser = '';
+
+  // Merge multiple users rows per column (some users span 2 rows)
+  const rawUsers = new Array(maxCols).fill('');
+  for (const uRow of userRows) {
+    for (let c = 1; c < uRow.length; c++) {
+      const u = stripColor(uRow[c] || '');
+      if (u) rawUsers[c] = rawUsers[c] ? rawUsers[c] + ', ' + u : u;
+    }
+  }
 
   for (let c = 1; c < maxCols; c++) {
     const a = stripColor(activityRow[c] || '');
     const s = stripColor(stepRow[c] || '');
     if (a) curAct  = a;
     if (s) curStep = s;
+    if (rawUsers[c]) curUser = rawUsers[c];
     colActivity[c] = curAct;
     colStep[c]     = curStep;
+    colUsers[c]    = curUser;
   }
 
   // Extract & parse stories
@@ -845,6 +859,7 @@ function parseStoryMap(data) {
         rows.push({
           activity: colActivity[c],
           step:     colStep[c] || colActivity[c],
+          users:    colUsers[c] || '',
           story,
           body,
         });
@@ -873,8 +888,8 @@ function renderTable() {
   const body = document.getElementById('tableBody');
 
   const ths = jira
-    ? ['Epic', 'Summary', 'Issue Type', 'Activity', 'Step', 'Acceptance Criteria']
-    : ['Activity', 'Step', 'User Story', 'Acceptance Criteria'];
+    ? ['Epic', 'Summary', 'Issue Type', 'Activity', 'Step', 'Users', 'Acceptance Criteria']
+    : ['Users', 'Activity', 'Step', 'User Story', 'Acceptance Criteria'];
 
   head.innerHTML = '<tr>' + ths.map(h => `<th>${h}</th>`).join('') + '</tr>';
 
@@ -899,6 +914,8 @@ function renderTable() {
       if (sameActivity) cls += ' row-same-activity';
       if (sameStep)     cls += ' row-same-step';
 
+      const usersCell = (grouped && sameStep) ? '' : escHtml(row.users || '');
+
       if (jira) {
         html += `<tr class="${cls}">
           <td>${escHtml(row.activity)}</td>
@@ -906,10 +923,12 @@ function renderTable() {
           <td>Story</td>
           <td>${escHtml(row.activity)}</td>
           <td>${escHtml(row.step)}</td>
+          <td>${escHtml(row.users || '')}</td>
           <td class="td-body">${bodyCell}</td>
         </tr>`;
       } else {
         html += `<tr class="${cls}">
+          <td>${usersCell}</td>
           <td>${actCell}</td>
           <td>${stepCell}</td>
           <td>${story}</td>
@@ -934,6 +953,7 @@ function filterTable() {
         r.activity.toLowerCase().includes(q) ||
         r.step.toLowerCase().includes(q) ||
         r.story.toLowerCase().includes(q) ||
+        (r.users || '').toLowerCase().includes(q) ||
         (r.body || '').toLowerCase().includes(q)
       )
     : [...parsedRows];
@@ -950,9 +970,9 @@ function updateStats() {
 // ─── Export: Clean CSV ────────────────────────────────────────────────────
 // ─── Export: Jira CSV ─────────────────────────────────────────────────────
 function downloadJiraCSV() {
-  const header = 'Summary,Issue Type,Epic Link,Epic Name,Story Points,Priority,Acceptance Criteria\n';
+  const header = 'Summary,Issue Type,Epic Link,Epic Name,Story Points,Priority,Users,Acceptance Criteria\n';
   const body = parsedRows.map(r =>
-    [r.story, 'Story', '', r.activity, '', 'Medium', r.body || '']
+    [r.story, 'Story', '', r.activity, '', 'Medium', r.users || '', r.body || '']
       .map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')
   ).join('\n');
   triggerDownload(header + body, 'jira-import.csv', 'text/csv');
@@ -964,12 +984,12 @@ function copyToClipboard() {
   const jira = document.getElementById('jiraToggle').checked;
 
   const headers = jira
-    ? ['Epic', 'Summary', 'Issue Type', 'Activity', 'Step', 'Acceptance Criteria']
-    : ['Activity', 'Step', 'User Story', 'Acceptance Criteria'];
+    ? ['Epic', 'Summary', 'Issue Type', 'Activity', 'Step', 'Users', 'Acceptance Criteria']
+    : ['Users', 'Activity', 'Step', 'User Story', 'Acceptance Criteria'];
 
   const textRows = filteredRows.map(r => jira
-    ? [r.activity, r.story, 'Story', r.activity, r.step, r.body || '']
-    : [r.activity, r.step, r.story, r.body || '']
+    ? [r.activity, r.story, 'Story', r.activity, r.step, r.users || '', r.body || '']
+    : [r.users || '', r.activity, r.step, r.story, r.body || '']
   );
 
   // Wrap cell containing tab/newline/quote in quotes (TSV-safe)
