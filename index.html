@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StoryMap → Story Table</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --surface2: #1a1a24;
+    --border: #2a2a3a;
+    --accent: #7c6bff;
+    --accent2: #ff6b9d;
+    --accent3: #6bffd4;
+    --text: #e8e8f0;
+    --text-dim: #6a6a8a;
+    --text-muted: #3a3a5a;
+    --success: #6bffd4;
+    --error: #ff6b6b;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 40px 40px;
+    opacity: 0.3;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Glow orbs */
+  body::after {
+    content: '';
+    position: fixed;
+    top: -200px;
+    left: -200px;
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle, rgba(124,107,255,0.12) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .orb2 {
+    position: fixed;
+    bottom: -200px;
+    right: -100px;
+    width: 500px;
+    height: 500px;
+    background: radial-gradient(circle, rgba(255,107,157,0.08) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 60px 24px 100px;
+  }
+
+  /* HEADER */
+  header {
+    margin-bottom: 56px;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--accent);
+    border: 1px solid rgba(124,107,255,0.3);
+    background: rgba(124,107,255,0.05);
+    padding: 5px 12px;
+    border-radius: 2px;
+    margin-bottom: 20px;
+  }
+
+  .badge::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+  }
+
+  h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(36px, 6vw, 72px);
+    font-weight: 800;
+    line-height: 1.0;
+    letter-spacing: -0.03em;
+    margin-bottom: 16px;
+  }
+
+  h1 span.arrow {
+    color: var(--accent);
+    display: inline-block;
+    animation: arrowBounce 1.5s ease-in-out infinite;
+  }
+
+  @keyframes arrowBounce {
+    0%, 100% { transform: translateX(0); }
+    50% { transform: translateX(6px); }
+  }
+
+  h1 .highlight {
+    color: var(--accent3);
+  }
+
+  .subtitle {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.6;
+    max-width: 500px;
+    font-weight: 300;
+  }
+
+  /* UPLOAD ZONE */
+  .upload-zone {
+    border: 1px dashed var(--border);
+    border-radius: 4px;
+    padding: 60px 40px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: var(--surface);
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 32px;
+  }
+
+  .upload-zone::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(124,107,255,0.03) 0%, transparent 50%);
+    pointer-events: none;
+  }
+
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(124,107,255,0.05);
+  }
+
+  .upload-zone.drag-over {
+    border-style: solid;
+    transform: scale(1.01);
+  }
+
+  .upload-icon {
+    width: 48px;
+    height: 48px;
+    margin: 0 auto 16px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--accent);
+    font-size: 20px;
+  }
+
+  .upload-label {
+    font-family: 'Syne', sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+
+  .upload-hint {
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.05em;
+  }
+
+  #fileInput { display: none; }
+
+  /* CONTROLS */
+  .controls-panel {
+    display: none;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 24px;
+    padding: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+  }
+
+  .controls-panel.visible { display: flex; }
+
+  .control-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .toggle-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .toggle {
+    position: relative;
+    width: 36px;
+    height: 20px;
+  }
+
+  .toggle input { display: none; }
+
+  .toggle-slider {
+    position: absolute;
+    inset: 0;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .toggle-slider::after {
+    content: '';
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    background: var(--text-muted);
+    border-radius: 50%;
+    top: 3px;
+    left: 3px;
+    transition: all 0.2s;
+  }
+
+  .toggle input:checked + .toggle-slider {
+    background: rgba(124,107,255,0.2);
+    border-color: var(--accent);
+  }
+
+  .toggle input:checked + .toggle-slider::after {
+    background: var(--accent);
+    transform: translateX(16px);
+  }
+
+  .divider {
+    width: 1px;
+    height: 24px;
+    background: var(--border);
+  }
+
+  /* ACTION BUTTONS */
+  .actions {
+    display: none;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 32px;
+  }
+
+  .actions.visible { display: flex; }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    border: none;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: white;
+  }
+  .btn-primary:hover { background: #9080ff; transform: translateY(-1px); }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid transparent;
+  }
+  .btn-ghost:hover { color: var(--accent2); border-color: rgba(255,107,157,0.3); }
+
+  .btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+  /* STATS BAR */
+  .stats-bar {
+    display: none;
+    gap: 24px;
+    padding: 14px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+
+  .stats-bar.visible { display: flex; }
+
+  .stat {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .stat-value {
+    font-family: 'Syne', sans-serif;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--accent);
+  }
+
+  .stat-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    line-height: 1.3;
+  }
+
+  .stat-divider {
+    width: 1px;
+    height: 32px;
+    background: var(--border);
+  }
+
+  /* ERROR */
+  .error-msg {
+    display: none;
+    padding: 14px 20px;
+    background: rgba(255,107,107,0.08);
+    border: 1px solid rgba(255,107,107,0.3);
+    border-radius: 4px;
+    color: var(--error);
+    font-size: 12px;
+    margin-bottom: 20px;
+  }
+  .error-msg.visible { display: block; }
+
+  /* TABLE SECTION */
+  .table-section {
+    display: none;
+  }
+  .table-section.visible { display: block; }
+
+  .table-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .table-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .table-count {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .table-wrapper {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+
+  thead {
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+  }
+
+  thead th {
+    padding: 12px 16px;
+    text-align: left;
+    font-family: 'Syne', sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+
+  thead th:first-child { color: var(--accent); }
+  thead th:nth-child(2) { color: var(--accent2); }
+  thead th:nth-child(3) { color: var(--accent3); }
+
+  tbody tr {
+    border-bottom: 1px solid rgba(42,42,58,0.5);
+    transition: background 0.1s;
+  }
+
+  tbody tr:hover { background: rgba(124,107,255,0.04); }
+  tbody tr:last-child { border-bottom: none; }
+
+  td {
+    padding: 11px 16px;
+    vertical-align: top;
+    line-height: 1.5;
+    color: var(--text);
+  }
+
+  td:first-child {
+    color: var(--accent);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  td:nth-child(2) {
+    color: rgba(255,107,157,0.85);
+    white-space: nowrap;
+  }
+
+  td:last-child, td:nth-last-child(2) {
+    color: var(--text);
+    max-width: 400px;
+  }
+
+  /* Row grouping visual */
+  .row-same-activity td:first-child { color: rgba(124,107,255,0.35); }
+  .row-same-step td:nth-child(2) { color: rgba(255,107,157,0.3); }
+
+.body-cell {
+    display: block;
+    white-space: pre-wrap;
+    font-size: 11px;
+    line-height: 1.6;
+    color: rgba(107,255,212,0.85);
+  }
+  .body-empty { color: var(--text-muted); }
+  .td-body { max-width: 360px; vertical-align: top; }
+  thead th:nth-child(4) { color: rgba(107,255,212,0.8); }
+
+  /* Empty state */
+  .empty-state {
+    padding: 60px 20px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 32px;
+    right: 32px;
+    padding: 12px 20px;
+    background: var(--surface2);
+    border: 1px solid var(--accent3);
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--accent3);
+    transform: translateY(80px);
+    opacity: 0;
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    z-index: 1000;
+    pointer-events: none;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+
+  /* Search */
+  .search-bar {
+    display: none;
+    position: relative;
+    margin-bottom: 16px;
+  }
+  .search-bar.visible { display: block; }
+
+  .search-input {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 10px 16px 10px 38px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .search-input:focus { border-color: var(--accent); }
+  .search-input::placeholder { color: var(--text-muted); }
+
+  .search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    pointer-events: none;
+  }
+
+  /* File info */
+  .file-info {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    background: rgba(124,107,255,0.05);
+    border: 1px solid rgba(124,107,255,0.2);
+    border-radius: 2px;
+    margin-bottom: 20px;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .file-info.visible { display: flex; }
+  .file-name { color: var(--accent); font-weight: 500; }
+
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .fade-in { animation: fadeInUp 0.4s ease forwards; }
+
+  /* Loading */
+  .loading {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    padding: 20px;
+    color: var(--text-dim);
+    font-size: 12px;
+  }
+  .loading.visible { display: flex; }
+
+  .spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Responsive */
+  @media (max-width: 640px) {
+    .container { padding: 40px 16px 60px; }
+    h1 { font-size: 32px; }
+    .upload-zone { padding: 40px 20px; }
+  }
+</style>
+</head>
+<body>
+<div class="orb2"></div>
+
+<div class="container">
+
+  <header>
+    <div class="badge">StoryMaps.io Converter</div>
+    <h1>
+      StoryMap <span class="arrow">→</span><br>
+      <span class="highlight">Story Table</span>
+    </h1>
+    <p class="subtitle">Upload your StoryMaps.io CSV export. Get a clean, vertical Activity → Step → Story breakdown — instantly.</p>
+  </header>
+
+  <!-- UPLOAD ZONE -->
+  <div class="upload-zone" id="uploadZone">
+    <input type="file" id="fileInput" accept=".csv">
+    <div class="upload-icon">⬆</div>
+    <div class="upload-label">Drop CSV file here or click to browse</div>
+    <div class="upload-hint">Supports StoryMaps.io CSV export format</div>
+  </div>
+
+  <!-- FILE INFO -->
+  <div class="file-info" id="fileInfo">
+    <span>📄</span>
+    <span class="file-name" id="fileName">—</span>
+    <span id="fileSize" style="color:var(--text-muted)">—</span>
+    <span style="margin-left:auto; cursor:pointer; color:var(--error);" onclick="resetAll()">✕ Remove</span>
+  </div>
+
+  <!-- LOADING -->
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    Parsing CSV…
+  </div>
+
+  <!-- ERROR -->
+  <div class="error-msg" id="errorMsg"></div>
+
+  <!-- CONTROLS -->
+  <div class="controls-panel" id="controlsPanel">
+    <div class="control-group">
+      <span class="toggle-label">Jira Export</span>
+      <label class="toggle">
+        <input type="checkbox" id="jiraToggle" onchange="renderTable()">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div class="divider"></div>
+    <div class="control-group">
+      <span class="toggle-label">Group rows</span>
+      <label class="toggle">
+        <input type="checkbox" id="groupToggle" checked onchange="renderTable()">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+  </div>
+
+  <!-- STATS -->
+  <div class="stats-bar" id="statsBar">
+    <div class="stat">
+      <span class="stat-value" id="statActivities">0</span>
+      <span class="stat-label">Activities</span>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat">
+      <span class="stat-value" id="statSteps">0</span>
+      <span class="stat-label">Steps</span>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat">
+      <span class="stat-value" id="statStories">0</span>
+      <span class="stat-label">Stories</span>
+    </div>
+  </div>
+
+  <!-- ACTIONS -->
+  <div class="actions" id="actionsBar">
+    <button class="btn btn-secondary" onclick="downloadJiraCSV()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      Jira CSV
+    </button>
+    <button class="btn btn-ghost" onclick="copyToClipboard()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      Copy Table
+    </button>
+    <button class="btn btn-ghost" onclick="resetAll()" style="margin-left:auto;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>
+      New File
+    </button>
+  </div>
+
+  <!-- SEARCH -->
+  <div class="search-bar" id="searchBar">
+    <span class="search-icon">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    </span>
+    <input class="search-input" type="text" id="searchInput" placeholder="Filter stories…" oninput="filterTable()">
+  </div>
+
+  <!-- TABLE -->
+  <div class="table-section" id="tableSection">
+    <div class="table-header">
+      <span class="table-title">Story Table</span>
+      <span class="table-count" id="tableCount">—</span>
+    </div>
+    <div class="table-wrapper">
+      <table id="storyTable">
+        <thead id="tableHead"></thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── State ───────────────────────────────────────────────────────────────
+let parsedRows = [];
+let filteredRows = [];
+
+// ─── Upload Zone ─────────────────────────────────────────────────────────
+const uploadZone = document.getElementById('uploadZone');
+const fileInput  = document.getElementById('fileInput');
+
+uploadZone.addEventListener('click', () => fileInput.click());
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f) handleFile(f);
+});
+fileInput.addEventListener('change', () => {
+  if (fileInput.files[0]) handleFile(fileInput.files[0]);
+});
+
+// ─── File Handling ────────────────────────────────────────────────────────
+function handleFile(file) {
+  if (!file.name.endsWith('.csv')) { showError('Please upload a valid .csv file.'); return; }
+  showLoading(true);
+  clearError();
+  document.getElementById('fileName').textContent = file.name;
+  document.getElementById('fileSize').textContent = formatBytes(file.size);
+  show('fileInfo');
+
+  Papa.parse(file, {
+    complete: res => {
+      showLoading(false);
+      try {
+        parsedRows = parseStoryMap(res.data);
+        if (!parsedRows.length) throw new Error('No stories found.');
+        filteredRows = [...parsedRows];
+        updateStats();
+        renderTable();
+        show('controlsPanel');
+        show('statsBar');
+        show('actionsBar');
+        show('searchBar');
+        show('tableSection');
+        document.querySelector('.table-section').classList.add('fade-in');
+        uploadZone.style.display = 'none';
+      } catch(err) {
+        showError(err.message);
+      }
+    },
+    error: () => { showLoading(false); showError('Failed to parse CSV.'); },
+    skipEmptyLines: false
+  });
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────
+function stripColor(val) {
+  return String(val || '').replace(/\s*\[color:[^\]]*\]/gi, '').trim();
+}
+
+function splitStoryBody(text) {
+  const bm = text.match(/^([\s\S]*?)\s*\[body:([\s\S]*?)\]\s*$/);
+  if (bm) return { story: bm[1].trim(), body: bm[2].trim() };
+  const bo = text.match(/^([\s\S]*?)\s*\[body:([\s\S]*)$/);
+  if (bo) return { story: bo[1].trim(), body: bo[2].replace(/\]$/, '').trim() };
+  return { story: text.trim(), body: '' };
+}
+
+// ─── Core Parser ──────────────────────────────────────────────────────────
+function parseStoryMap(data) {
+  let activityRow = null, stepRow = null;
+  const sliceRows = [];
+
+  for (const row of data) {
+    const label = (row[0] || '').trim().toLowerCase();
+    if (label === 'activities') activityRow = row;
+    else if (label === 'steps')  stepRow = row;
+    else if (label.startsWith('slice')) sliceRows.push(row);
+  }
+
+  // Fallback: no explicit labels — use row position heuristic
+  if (!activityRow || !stepRow) {
+    const nonEmpty = data.filter(r => r.some(c => c && c.trim()));
+    if (nonEmpty.length < 2) throw new Error('CSV appears empty or too short.');
+    activityRow = nonEmpty[0];
+    stepRow = nonEmpty[1];
+    for (let i = 2; i < nonEmpty.length; i++) sliceRows.push(nonEmpty[i]);
+  }
+
+  if (!sliceRows.length) throw new Error('No story rows found in CSV.');
+
+  // Build column map with forward-fill
+  const maxCols = Math.max(
+    activityRow.length, stepRow.length,
+    ...sliceRows.map(r => r.length)
+  );
+
+  const colActivity = new Array(maxCols).fill('');
+  const colStep     = new Array(maxCols).fill('');
+  let curAct = '', curStep = '';
+
+  for (let c = 1; c < maxCols; c++) {
+    const a = stripColor(activityRow[c] || '');
+    const s = stripColor(stepRow[c] || '');
+    if (a) curAct  = a;
+    if (s) curStep = s;
+    colActivity[c] = curAct;
+    colStep[c]     = curStep;
+  }
+
+  // Extract & parse stories
+  const rows = [];
+  for (const row of sliceRows) {
+    for (let c = 1; c < row.length; c++) {
+      const cell = (row[c] || '').trim();
+      if (!cell) continue;
+      if (!/story\s*:/i.test(cell)) continue;
+
+      const full = cell.replace(/^.*?story\s*:\s*/i, '').trim();
+      const { story, body } = splitStoryBody(full);
+
+      if (story && colActivity[c]) {
+        rows.push({
+          activity: colActivity[c],
+          step:     colStep[c] || colActivity[c],
+          story,
+          body,
+        });
+      }
+    }
+  }
+
+  if (!rows.length) throw new Error('No "story:" entries found in this CSV.');
+
+  // Sort: Activity → Step → Story
+  rows.sort((a, b) => {
+    if (a.activity !== b.activity) return a.activity.localeCompare(b.activity);
+    if (a.step !== b.step)         return a.step.localeCompare(b.step);
+    return a.story.localeCompare(b.story);
+  });
+
+  return rows;
+}
+
+// ─── Render Table ─────────────────────────────────────────────────────────
+function renderTable() {
+  const jira    = document.getElementById('jiraToggle').checked;
+  const grouped = document.getElementById('groupToggle').checked;
+
+  const head = document.getElementById('tableHead');
+  const body = document.getElementById('tableBody');
+
+  const ths = jira
+    ? ['Epic', 'Summary', 'Issue Type', 'Activity', 'Step', 'Acceptance Criteria']
+    : ['Activity', 'Step', 'User Story', 'Acceptance Criteria'];
+
+  head.innerHTML = '<tr>' + ths.map(h => `<th>${h}</th>`).join('') + '</tr>';
+
+  let html = '';
+  let lastActivity = null, lastStep = null;
+
+  if (!filteredRows.length) {
+    html = `<tr><td colspan="${ths.length}" class="empty-state">No stories match your filter.</td></tr>`;
+  } else {
+    filteredRows.forEach(row => {
+      const sameActivity = grouped && row.activity === lastActivity;
+      const sameStep     = grouped && row.step === lastStep && sameActivity;
+
+      const actCell  = (grouped && sameActivity) ? '' : escHtml(row.activity);
+      const stepCell = (grouped && sameStep)     ? '' : escHtml(row.step);
+      const story    = escHtml(row.story);
+      const bodyCell = row.body
+        ? `<span class="body-cell">${escHtml(row.body)}</span>`
+        : `<span class="body-empty">—</span>`;
+
+      let cls = '';
+      if (sameActivity) cls += ' row-same-activity';
+      if (sameStep)     cls += ' row-same-step';
+
+      if (jira) {
+        html += `<tr class="${cls}">
+          <td>${escHtml(row.activity)}</td>
+          <td>${story}</td>
+          <td>Story</td>
+          <td>${escHtml(row.activity)}</td>
+          <td>${escHtml(row.step)}</td>
+          <td class="td-body">${bodyCell}</td>
+        </tr>`;
+      } else {
+        html += `<tr class="${cls}">
+          <td>${actCell}</td>
+          <td>${stepCell}</td>
+          <td>${story}</td>
+          <td class="td-body">${bodyCell}</td>
+        </tr>`;
+      }
+
+      lastActivity = row.activity;
+      lastStep     = row.step;
+    });
+  }
+
+  body.innerHTML = html;
+  document.getElementById('tableCount').textContent = `${filteredRows.length} stories`;
+}
+
+// ─── Filter ───────────────────────────────────────────────────────────────
+function filterTable() {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  filteredRows = q
+    ? parsedRows.filter(r =>
+        r.activity.toLowerCase().includes(q) ||
+        r.step.toLowerCase().includes(q) ||
+        r.story.toLowerCase().includes(q) ||
+        (r.body || '').toLowerCase().includes(q)
+      )
+    : [...parsedRows];
+  renderTable();
+}
+
+// ─── Stats ────────────────────────────────────────────────────────────────
+function updateStats() {
+  document.getElementById('statActivities').textContent = new Set(parsedRows.map(r => r.activity)).size;
+  document.getElementById('statSteps').textContent      = new Set(parsedRows.map(r => r.activity + '|' + r.step)).size;
+  document.getElementById('statStories').textContent    = parsedRows.length;
+}
+
+// ─── Export: Clean CSV ────────────────────────────────────────────────────
+// ─── Export: Jira CSV ─────────────────────────────────────────────────────
+function downloadJiraCSV() {
+  const header = 'Summary,Issue Type,Epic Link,Epic Name,Story Points,Priority,Acceptance Criteria\n';
+  const body = parsedRows.map(r =>
+    [r.story, 'Story', '', r.activity, '', 'Medium', r.body || '']
+      .map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')
+  ).join('\n');
+  triggerDownload(header + body, 'jira-import.csv', 'text/csv');
+  showToast('Downloaded jira-import.csv');
+}
+
+// ─── Copy to Clipboard ────────────────────────────────────────────────────
+function copyToClipboard() {
+  const jira = document.getElementById('jiraToggle').checked;
+
+  const headers = jira
+    ? ['Epic', 'Summary', 'Issue Type', 'Activity', 'Step', 'Acceptance Criteria']
+    : ['Activity', 'Step', 'User Story', 'Acceptance Criteria'];
+
+  const textRows = filteredRows.map(r => jira
+    ? [r.activity, r.story, 'Story', r.activity, r.step, r.body || '']
+    : [r.activity, r.step, r.story, r.body || '']
+  );
+
+  // Wrap cell containing tab/newline/quote in quotes (TSV-safe)
+  const tsvCell = v => {
+    const s = String(v == null ? '' : v);
+    return (s.includes('\t') || s.includes('\n') || s.includes('"'))
+      ? '"' + s.replace(/"/g, '""') + '"'
+      : s;
+  };
+
+  const plainText = [headers, ...textRows]
+    .map(row => row.map(tsvCell).join('\t'))
+    .join('\n');
+
+  const thHtml = headers.map(h => `<th>${escHtml(h)}</th>`).join('');
+  const trHtml = textRows.map(cols =>
+    '<tr>' + cols.map(v =>
+      `<td style="white-space:pre-wrap">${escHtml(String(v == null ? '' : v))}</td>`
+    ).join('') + '</tr>'
+  ).join('');
+  const htmlText = `<table><thead><tr>${thHtml}</tr></thead><tbody>${trHtml}</tbody></table>`;
+
+  if (navigator.clipboard && window.ClipboardItem) {
+    const item = new ClipboardItem({
+      'text/plain': new Blob([plainText], { type: 'text/plain' }),
+      'text/html':  new Blob([htmlText],  { type: 'text/html'  }),
+    });
+    navigator.clipboard.write([item])
+      .then(() => showToast('Table copied — paste into Sheets, Notion, or Excel'))
+      .catch(() => fallbackCopy(plainText));
+  } else if (navigator.clipboard) {
+    navigator.clipboard.writeText(plainText)
+      .then(() => showToast('Table copied to clipboard'))
+      .catch(() => fallbackCopy(plainText));
+  } else {
+    fallbackCopy(plainText);
+  }
+}
+
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
+  document.body.appendChild(ta);
+  ta.focus(); ta.select();
+  try {
+    const ok = document.execCommand('copy');
+    showToast(ok ? 'Table copied to clipboard' : 'Copy failed — please select and copy manually');
+  } catch { showToast('Copy not supported — please select and copy manually'); }
+  document.body.removeChild(ta);
+}
+
+// ─── Reset ────────────────────────────────────────────────────────────────
+function resetAll() {
+  parsedRows = []; filteredRows = [];
+  fileInput.value = '';
+  uploadZone.style.display = '';
+  hide('fileInfo'); hide('controlsPanel'); hide('statsBar');
+  hide('actionsBar'); hide('searchBar'); hide('tableSection');
+  clearError();
+  document.getElementById('searchInput').value = '';
+}
+
+// ─── Utilities ────────────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function formatBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(1) + ' MB';
+}
+function triggerDownload(content, filename, type) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content], {type}));
+  a.download = filename; a.click();
+}
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = '✓ ' + msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+function showError(msg) {
+  const el = document.getElementById('errorMsg');
+  el.textContent = '⚠ ' + msg;
+  el.classList.add('visible');
+}
+function clearError() { document.getElementById('errorMsg').classList.remove('visible'); }
+function showLoading(v) { document.getElementById('loading').classList.toggle('visible', v); }
+function show(id) { document.getElementById(id).classList.add('visible'); }
+function hide(id) { document.getElementById(id).classList.remove('visible'); }
+</script>
+
+</body>
+</html>
